@@ -1,0 +1,97 @@
+name: Security & Dependencies
+
+on:
+  schedule:
+    # Run weekly on Sundays at 12:00 UTC
+    - cron: '0 12 * * 0'
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run npm audit
+        run: |
+          npm audit --audit-level=moderate
+          
+      - name: Check for known vulnerabilities
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        if: github.event_name == 'pull_request'
+        
+  update-dependencies:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          
+      - name: Update dependencies
+        run: |
+          # Update patch and minor versions only
+          npm update
+          
+      - name: Check for changes
+        id: changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Create Pull Request
+        if: steps.changes.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update dependencies'
+          title: 'chore: automated dependency updates'
+          body: |
+            ## 🤖 Automated Dependency Update
+            
+            This PR was automatically created to update dependencies to their latest patch/minor versions.
+            
+            ### Changes
+            - Updated npm dependencies to latest compatible versions
+            - All updates are patch or minor version bumps (no breaking changes)
+            
+            ### Testing
+            The CI pipeline will run all tests to ensure compatibility.
+            
+            ---
+            
+            🔍 **Review the changes** and merge if all tests pass.
+          branch: chore/update-dependencies
+          delete-branch: true

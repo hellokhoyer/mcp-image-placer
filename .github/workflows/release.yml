@@ -1,0 +1,112 @@
+name: Release & Publish
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    name: Publish to NPM
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Verify package version matches release tag
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          RELEASE_TAG=${GITHUB_REF#refs/tags/v}
+          
+          echo "Package version: $PACKAGE_VERSION"
+          echo "Release tag: $RELEASE_TAG"
+          
+          if [ "$PACKAGE_VERSION" != "$RELEASE_TAG" ]; then
+            echo "❌ Version mismatch! Package version ($PACKAGE_VERSION) doesn't match release tag ($RELEASE_TAG)"
+            exit 1
+          fi
+          
+          echo "✅ Version matches release tag"
+          
+      - name: Run quality checks
+        run: |
+          npm run type-check
+          npm run lint
+          npm run format:check
+          
+      - name: Run tests
+        run: npm run test:ci
+        
+      - name: Build project
+        run: npm run build:clean
+        
+      - name: Verify build output
+        run: |
+          if [ ! -f "dist/index.js" ] || [ ! -f "dist/cli/index.js" ]; then
+            echo "❌ Build output is missing required files"
+            exit 1
+          fi
+          
+          if [ ! -x "dist/cli/index.js" ]; then
+            echo "❌ CLI file is not executable"
+            exit 1
+          fi
+          
+          echo "✅ Build output verified"
+          
+      - name: Test package integrity
+        run: |
+          npm pack --dry-run
+          echo "✅ Package integrity verified"
+          
+      - name: Publish to NPM
+        run: |
+          echo "📦 Publishing version ${{ github.event.release.tag_name }} to NPM..."
+          npm publish --access public
+          echo "✅ Successfully published to NPM!"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          
+      - name: Verify NPM publication
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          
+          echo "⏳ Waiting for NPM registry to update..."
+          sleep 30
+          
+          NPM_VERSION=$(npm view mcp-image-placeholder version 2>/dev/null || echo "not-found")
+          
+          if [ "$NPM_VERSION" = "$PACKAGE_VERSION" ]; then
+            echo "✅ Package successfully published to NPM"
+            echo "📦 Version $PACKAGE_VERSION is now available at https://www.npmjs.com/package/mcp-image-placeholder"
+          else
+            echo "⚠️  NPM registry may still be updating. Published version: $PACKAGE_VERSION, Registry version: $NPM_VERSION"
+          fi
+          
+      - name: Create deployment summary
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Successfully published MCP Image Placeholder v$PACKAGE_VERSION to NPM**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Installation" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "npm install -g mcp-image-placeholder@$PACKAGE_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 [NPM Package](https://www.npmjs.com/package/mcp-image-placeholder)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📝 [Release Notes](${{ github.event.release.html_url }})" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 [GitHub Action Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
