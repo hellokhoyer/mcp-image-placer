@@ -60,6 +60,14 @@ const isMainModule =
   process.argv[1]?.endsWith('dist/cli/index.js') ||
   process.argv[1]?.endsWith('src/cli/index.ts');
 
+// Debug logging for module detection (can be removed after fix)
+if (process.env.DEBUG_MCP === '1') {
+  console.error(`DEBUG: import.meta.url = ${import.meta.url}`);
+  console.error(`DEBUG: process.argv[1] = ${process.argv[1]}`);
+  console.error(`DEBUG: file://${process.argv[1]} = file://${process.argv[1]}`);
+  console.error(`DEBUG: isMainModule = ${isMainModule}`);
+}
+
 if (isMainModule) {
   startServer().catch(error => {
     console.error('Unexpected error during server startup:', error);
