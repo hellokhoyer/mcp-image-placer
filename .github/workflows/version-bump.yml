@@ -1,0 +1,181 @@
+name: Version Bump Helper
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+      prerelease_id:
+        description: 'Prerelease identifier (for prerelease only)'
+        required: false
+        default: 'beta'
+        type: string
+      create_release:
+        description: 'Create GitHub release after version bump'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  version-bump:
+    name: Bump Version
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run quality checks
+        run: |
+          npm run type-check
+          npm run lint
+          npm run format:check
+          npm run test:ci
+          npm run build:clean
+          
+      - name: Bump version
+        id: version
+        run: |
+          if [ "${{ github.event.inputs.version_type }}" = "prerelease" ]; then
+            NEW_VERSION=$(npm version prerelease --preid=${{ github.event.inputs.prerelease_id }})
+          else
+            NEW_VERSION=$(npm version ${{ github.event.inputs.version_type }})
+          fi
+          
+          echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "📦 Bumped version to ${NEW_VERSION}"
+          
+      - name: Update CHANGELOG.md
+        run: |
+          VERSION="${{ steps.version.outputs.new_version }}"
+          VERSION_NUMBER=${VERSION#v}
+          DATE=$(date +%Y-%m-%d)
+          
+          # Create new changelog entry
+          echo "## [${VERSION_NUMBER}] - ${DATE}" > temp_changelog.md
+          echo "" >> temp_changelog.md
+          echo "### Added" >> temp_changelog.md
+          echo "- " >> temp_changelog.md
+          echo "" >> temp_changelog.md
+          echo "### Changed" >> temp_changelog.md
+          echo "- " >> temp_changelog.md
+          echo "" >> temp_changelog.md
+          echo "### Fixed" >> temp_changelog.md
+          echo "- " >> temp_changelog.md
+          echo "" >> temp_changelog.md
+          
+          # Combine with existing changelog
+          if [ -f "CHANGELOG.md" ]; then
+            # Find the line after "## Unreleased" or the first "##" and insert new entry
+            if grep -q "## Unreleased" CHANGELOG.md; then
+              # Insert after "## Unreleased" section
+              awk '/## Unreleased/{print; print ""; getline; while($0 !~ /^## / && NF>0){print; getline} print ""; while((getline line < "temp_changelog.md") > 0){print line} close("temp_changelog.md"); print $0; next} 1' CHANGELOG.md > new_changelog.md
+            else
+              # Insert at the beginning of changelog entries
+              awk '/^## /{if(!inserted){while((getline line < "temp_changelog.md") > 0){print line} close("temp_changelog.md"); print ""; inserted=1} print; next} 1' CHANGELOG.md > new_changelog.md
+            fi
+            
+            mv new_changelog.md CHANGELOG.md
+          else
+            # Create new changelog
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "All notable changes to this project will be documented in this file." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)," >> CHANGELOG.md
+            echo "and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            cat temp_changelog.md >> CHANGELOG.md
+          fi
+          
+          rm temp_changelog.md
+          
+          echo "✅ Updated CHANGELOG.md with new version ${VERSION_NUMBER}"
+          
+      - name: Commit changes
+        run: |
+          git add package.json package-lock.json CHANGELOG.md
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
+          
+      - name: Push changes
+        run: |
+          git push origin main
+          git push origin ${{ steps.version.outputs.new_version }}
+          
+      - name: Create GitHub Release
+        if: ${{ github.event.inputs.create_release }}
+        run: |
+          VERSION="${{ steps.version.outputs.new_version }}"
+          VERSION_NUMBER=${VERSION#v}
+          
+          # Extract changelog entry for this version
+          awk "/## \[${VERSION_NUMBER}\]/,/## \[.*\]/{if(/## \[${VERSION_NUMBER}\]/) next; if(/## \[.*\]/) exit; print}" CHANGELOG.md > release_notes.md
+          
+          # Create release
+          gh release create ${VERSION} \
+            --title "MCP Image Placeholder ${VERSION}" \
+            --notes-file release_notes.md \
+            --latest
+          
+          echo "🚀 Created GitHub release: ${VERSION}"
+          
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Summary
+        run: |
+          VERSION="${{ steps.version.outputs.new_version }}"
+          
+          echo "## 🎉 Version Bump Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Successfully bumped to ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 What was done:" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 Updated package.json version" >> $GITHUB_STEP_SUMMARY
+          echo "- 📝 Updated CHANGELOG.md with new entry" >> $GITHUB_STEP_SUMMARY
+          echo "- 🏷️ Created git tag: ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🚀 Pushed changes to main branch" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.create_release }}" = "true" ]; then
+            echo "- 📋 Created GitHub release" >> $GITHUB_STEP_SUMMARY
+            echo "- 🤖 **Automated NPM publishing will start automatically!**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏸️ GitHub release creation was skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Next Steps:" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.create_release }}" = "true" ]; then
+            echo "1. 🔍 Monitor the [Release & Publish workflow](../actions/workflows/release.yml)" >> $GITHUB_STEP_SUMMARY
+            echo "2. ✅ Verify package appears on [NPM](https://www.npmjs.com/package/mcp-image-placeholder)" >> $GITHUB_STEP_SUMMARY
+            echo "3. 🧪 Test installation: \`npm install -g mcp-image-placeholder@${VERSION#v}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "1. 📝 Edit the CHANGELOG.md to add details about this release" >> $GITHUB_STEP_SUMMARY
+            echo "2. 🚀 Create a GitHub release manually when ready" >> $GITHUB_STEP_SUMMARY
+            echo "3. 📦 NPM publishing will happen automatically after release creation" >> $GITHUB_STEP_SUMMARY
+          fi
