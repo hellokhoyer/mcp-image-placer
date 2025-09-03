@@ -1,6 +1,6 @@
 {
   "name": "mcp-image-placeholder",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "MCP server for generating placeholder images using placehold.co and picsum.photos",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
