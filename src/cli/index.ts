@@ -54,23 +54,18 @@ async function startServer(): Promise<void> {
 }
 
 // Start the server if this file is run directly
-// Check both import.meta.url and process.argv[1] for better compatibility with MCP clients
-const isMainModule =
-  import.meta.url === `file://${process.argv[1]}` ||
-  process.argv[1]?.endsWith('dist/cli/index.js') ||
-  process.argv[1]?.endsWith('src/cli/index.ts');
+// For MCP servers, we should always start when this script is executed
+// The previous logic was too restrictive and failed in npm global installations
 
 // Debug logging for module detection (can be removed after fix)
 if (process.env.DEBUG_MCP === '1') {
   console.error(`DEBUG: import.meta.url = ${import.meta.url}`);
   console.error(`DEBUG: process.argv[1] = ${process.argv[1]}`);
-  console.error(`DEBUG: file://${process.argv[1]} = file://${process.argv[1]}`);
-  console.error(`DEBUG: isMainModule = ${isMainModule}`);
+  console.error(`DEBUG: Starting server automatically (fixed logic)`);
 }
 
-if (isMainModule) {
-  startServer().catch(error => {
-    console.error('Unexpected error during server startup:', error);
-    process.exit(1);
-  });
-}
+// Always start the server - this is a CLI entry point
+startServer().catch(error => {
+  console.error('Unexpected error during server startup:', error);
+  process.exit(1);
+});
