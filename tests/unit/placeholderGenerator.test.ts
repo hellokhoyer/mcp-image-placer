@@ -1,5 +1,5 @@
 /**
- * Unit tests for PlaceholderGenerator
+ * Enhanced unit tests for PlaceholderGenerator with comprehensive provider-specific features
  */
 
 import { PlaceholderGenerator } from '../../src/core/placeholderGenerator';
@@ -9,9 +9,8 @@ import {
   ValidationConstraints,
   ProviderConfig,
   Logger,
-  Provider,
 } from '../../src/types/index';
-import { ProviderError } from '../../src/errors/index';
+import { ValidationError } from '../../src/errors/index';
 
 // Mock logger
 const mockLogger: Logger = {
@@ -21,7 +20,7 @@ const mockLogger: Logger = {
   error: jest.fn(),
 };
 
-describe('PlaceholderGenerator', () => {
+describe('Enhanced PlaceholderGenerator', () => {
   let generator: PlaceholderGenerator;
   let validator: PlaceholderValidator;
   let constraints: ValidationConstraints;
@@ -29,10 +28,10 @@ describe('PlaceholderGenerator', () => {
 
   beforeEach(() => {
     constraints = {
-      minWidth: 1,
-      maxWidth: 10000,
-      minHeight: 1,
-      maxHeight: 10000,
+      minWidth: 10,
+      maxWidth: 4000,
+      minHeight: 10,
+      maxHeight: 4000,
       supportedProviders: ['placehold', 'lorem-picsum'],
     };
 
@@ -54,8 +53,8 @@ describe('PlaceholderGenerator', () => {
     jest.clearAllMocks();
   });
 
-  describe('generatePlaceholder', () => {
-    it('should generate placeholder for placehold provider', async () => {
+  describe('Basic functionality (backward compatibility)', () => {
+    it('should generate basic placehold URL', async () => {
       const params: ImagePlaceholderParams = {
         provider: 'placehold',
         width: 300,
@@ -68,21 +67,11 @@ describe('PlaceholderGenerator', () => {
         url: 'https://placehold.co/300x200',
         provider: 'placehold',
         dimensions: { width: 300, height: 200 },
+        appliedOptions: {},
       });
-
-      expect(mockLogger.debug).toHaveBeenCalledWith('Generating placeholder image', { params });
-
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Placeholder image generated successfully',
-        expect.objectContaining({
-          provider: 'placehold',
-          dimensions: '300x200',
-          url: 'https://placehold.co/300x200',
-        })
-      );
     });
 
-    it('should generate placeholder for lorem-picsum provider', async () => {
+    it('should generate basic picsum URL', async () => {
       const params: ImagePlaceholderParams = {
         provider: 'lorem-picsum',
         width: 400,
@@ -95,171 +84,496 @@ describe('PlaceholderGenerator', () => {
         url: 'https://picsum.photos/400/300',
         provider: 'lorem-picsum',
         dimensions: { width: 400, height: 300 },
+        appliedOptions: {},
       });
     });
 
-    it('should handle provider configuration errors', async () => {
-      // Create generator with missing provider config
-      const incompleteConfig: Partial<ProviderConfig> = {
-        placehold: {
-          baseUrl: 'https://placehold.co',
-          urlTemplate: '{baseUrl}/{width}x{height}',
-        },
-        // missing lorem-picsum config
+    it('should generate square images when height is omitted', async () => {
+      const params: ImagePlaceholderParams = {
+        provider: 'placehold',
+        width: 300,
       };
 
-      const generatorWithBadConfig = new PlaceholderGenerator(
-        validator,
-        incompleteConfig as ProviderConfig,
-        mockLogger
-      );
+      const result = await generator.generatePlaceholder(params);
 
+      expect(result).toEqual({
+        url: 'https://placehold.co/300',
+        provider: 'placehold',
+        dimensions: { width: 300, height: 300 },
+        appliedOptions: {},
+      });
+    });
+  });
+
+  describe('Placehold.co enhanced features', () => {
+    describe('File formats', () => {
+      it('should generate PNG format URL', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: { format: 'png' },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/600x400.png');
+      });
+
+      it('should generate WebP format URL', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: { format: 'webp' },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/600x400.webp');
+      });
+
+      it('should default to SVG (no extension)', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: { format: 'svg' },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/600x400');
+      });
+    });
+
+    describe('Colors', () => {
+      it('should generate URL with hex colors', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: {
+            backgroundColor: '000000',
+            textColor: 'FFFFFF',
+            format: 'png',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/600x400/000000/FFFFFF.png');
+      });
+
+      it('should generate URL with CSS color names', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: {
+            backgroundColor: 'orange',
+            textColor: 'white',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/600x400/orange/white');
+      });
+
+      it('should generate URL with transparent background', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: {
+            backgroundColor: 'transparent',
+            textColor: 'F00',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/600x400/transparent/F00');
+      });
+
+      it('should throw error if only one color is specified', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: {
+            backgroundColor: 'red',
+            // textColor missing
+          },
+        };
+
+        await expect(generator.generatePlaceholder(params)).rejects.toThrow(ValidationError);
+      });
+    });
+
+    describe('Custom text', () => {
+      it('should generate URL with custom text', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: {
+            customText: 'Hello World',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/600x400?text=Hello+World');
+      });
+
+      it('should handle text with newlines', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: {
+            customText: 'Hello\nWorld',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/600x400?text=Hello\\nWorld');
+      });
+    });
+
+    describe('Fonts', () => {
+      it('should generate URL with custom font', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: {
+            font: 'roboto',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/600x400?font=roboto');
+      });
+
+      it('should handle fonts with dashes', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 800,
+          placeholdOptions: {
+            customText: 'Hello World',
+            font: 'playfair-display',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/800?text=Hello+World&font=playfair+display');
+      });
+    });
+
+    describe('Retina support', () => {
+      it('should generate 2x retina URL', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: {
+            retina: '2x',
+            format: 'png',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/600x400@2x.png');
+      });
+
+      it('should generate 3x retina URL', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 800,
+          placeholdOptions: {
+            retina: '3x',
+            format: 'webp',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://placehold.co/800@3x.webp');
+      });
+
+      it('should throw error for retina with SVG', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 600,
+          height: 400,
+          placeholdOptions: {
+            retina: '2x',
+            format: 'svg',
+          },
+        };
+
+        await expect(generator.generatePlaceholder(params)).rejects.toThrow(ValidationError);
+      });
+    });
+
+    describe('Complex combinations', () => {
+      it('should generate full-featured URL from documentation example', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'placehold',
+          width: 1200,
+          height: 630,
+          placeholdOptions: {
+            retina: '2x',
+            backgroundColor: 'f9fafb',
+            textColor: '2563eb',
+            format: 'png',
+            customText: 'DeepakNess',
+            font: 'playfair-display',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe(
+          'https://placehold.co/1200x630@2x/f9fafb/2563eb.png?text=DeepakNess&font=playfair+display'
+        );
+      });
+    });
+  });
+
+  describe('Picsum.photos enhanced features', () => {
+    describe('Specific images', () => {
+      it('should generate URL with specific image ID', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'lorem-picsum',
+          width: 200,
+          height: 300,
+          picsumOptions: {
+            imageId: 237,
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://picsum.photos/id/237/200/300');
+      });
+    });
+
+    describe('Seeded random images', () => {
+      it('should generate URL with seed', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'lorem-picsum',
+          width: 200,
+          height: 300,
+          picsumOptions: {
+            seed: 'picsum',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://picsum.photos/seed/picsum/200/300');
+      });
+    });
+
+    describe('Effects', () => {
+      it('should generate grayscale URL', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'lorem-picsum',
+          width: 200,
+          height: 300,
+          picsumOptions: {
+            grayscale: true,
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://picsum.photos/200/300?grayscale');
+      });
+
+      it('should generate blur URL with default intensity', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'lorem-picsum',
+          width: 200,
+          height: 300,
+          picsumOptions: {
+            blur: 1,
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://picsum.photos/200/300?blur');
+      });
+
+      it('should generate blur URL with specific intensity', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'lorem-picsum',
+          width: 200,
+          height: 300,
+          picsumOptions: {
+            blur: 2,
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://picsum.photos/200/300?blur=2');
+      });
+
+      it('should generate combined effects URL from documentation', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'lorem-picsum',
+          width: 200,
+          height: 300,
+          picsumOptions: {
+            imageId: 870,
+            grayscale: true,
+            blur: 2,
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://picsum.photos/id/870/200/300?grayscale&blur=2');
+      });
+    });
+
+    describe('File formats', () => {
+      it('should generate JPG format URL', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'lorem-picsum',
+          width: 200,
+          height: 300,
+          picsumOptions: {
+            format: 'jpg',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://picsum.photos/200/300.jpg');
+      });
+
+      it('should generate WebP format URL', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'lorem-picsum',
+          width: 200,
+          height: 300,
+          picsumOptions: {
+            format: 'webp',
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://picsum.photos/200/300.webp');
+      });
+    });
+
+    describe('Cache busting', () => {
+      it('should generate URL with random parameter', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'lorem-picsum',
+          width: 200,
+          height: 300,
+          picsumOptions: {
+            random: 1,
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://picsum.photos/200/300?random=1');
+      });
+
+      it('should combine random with effects', async () => {
+        const params: ImagePlaceholderParams = {
+          provider: 'lorem-picsum',
+          width: 200,
+          height: 300,
+          picsumOptions: {
+            random: 2,
+            grayscale: true,
+          },
+        };
+
+        const result = await generator.generatePlaceholder(params);
+        expect(result.url).toBe('https://picsum.photos/200/300?grayscale&random=2');
+      });
+    });
+  });
+
+  describe('Validation and error handling', () => {
+    it('should reject mismatched provider options', async () => {
+      const params: ImagePlaceholderParams = {
+        provider: 'placehold',
+        width: 300,
+        height: 200,
+        picsumOptions: { grayscale: true }, // Wrong options for placehold
+      };
+
+      await expect(generator.generatePlaceholder(params)).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject invalid color combinations', async () => {
+      const params: ImagePlaceholderParams = {
+        provider: 'placehold',
+        width: 300,
+        height: 200,
+        placeholdOptions: {
+          backgroundColor: 'invalid-color',
+          textColor: 'white',
+        },
+      };
+
+      await expect(generator.generatePlaceholder(params)).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject invalid blur values', async () => {
       const params: ImagePlaceholderParams = {
         provider: 'lorem-picsum',
         width: 300,
         height: 200,
-      };
-
-      await expect(generatorWithBadConfig.generatePlaceholder(params)).rejects.toThrow(
-        ProviderError
-      );
-    });
-
-    it('should handle invalid provider configuration structure', async () => {
-      const badConfig: ProviderConfig = {
-        placehold: {
-          baseUrl: '', // Empty baseUrl
-          urlTemplate: '{baseUrl}/{width}x{height}',
-        },
-        'lorem-picsum': {
-          baseUrl: 'https://picsum.photos',
-          urlTemplate: '{baseUrl}/{width}/{height}',
+        picsumOptions: {
+          blur: 15, // Invalid: must be 1-10
         },
       };
 
-      const generatorWithBadConfig = new PlaceholderGenerator(validator, badConfig, mockLogger);
-
-      const params: ImagePlaceholderParams = {
-        provider: 'placehold',
-        width: 300,
-        height: 200,
-      };
-
-      await expect(generatorWithBadConfig.generatePlaceholder(params)).rejects.toThrow(
-        ProviderError
-      );
-    });
-  });
-
-  describe('buildProviderUrl', () => {
-    it('should handle template with all required variables', async () => {
-      const params: ImagePlaceholderParams = {
-        provider: 'placehold',
-        width: 150,
-        height: 100,
-      };
-
-      const result = await generator.generatePlaceholder(params);
-      expect(result.url).toBe('https://placehold.co/150x100');
+      await expect(generator.generatePlaceholder(params)).rejects.toThrow(ValidationError);
     });
 
-    it('should handle different URL templates', async () => {
-      // Test lorem-picsum format
+    it('should reject mutually exclusive picsum options', async () => {
       const params: ImagePlaceholderParams = {
         provider: 'lorem-picsum',
-        width: 500,
-        height: 350,
+        width: 300,
+        height: 200,
+        picsumOptions: {
+          imageId: 123,
+          seed: 'test', // Can't have both
+        },
       };
 
-      const result = await generator.generatePlaceholder(params);
-      expect(result.url).toBe('https://picsum.photos/500/350');
+      await expect(generator.generatePlaceholder(params)).rejects.toThrow(ValidationError);
     });
+  });
 
-    it('should throw ProviderError for missing template variables', async () => {
-      const badConfig: ProviderConfig = {
-        placehold: {
-          baseUrl: 'https://placehold.co',
-          urlTemplate: '{baseUrl}/{width}x{height}x{missing}', // Missing variable
-        },
-        'lorem-picsum': {
-          baseUrl: 'https://picsum.photos',
-          urlTemplate: '{baseUrl}/{width}/{height}',
-        },
-      };
-
-      const generatorWithBadTemplate = new PlaceholderGenerator(validator, badConfig, mockLogger);
-
+  describe('Logging and debugging', () => {
+    it('should include applied options in result', async () => {
       const params: ImagePlaceholderParams = {
         provider: 'placehold',
         width: 300,
         height: 200,
-      };
-
-      await expect(generatorWithBadTemplate.generatePlaceholder(params)).rejects.toThrow(
-        ProviderError
-      );
-    });
-  });
-
-  describe('getSupportedProviders', () => {
-    it('should return list of supported providers', () => {
-      const providers = generator.getSupportedProviders();
-      expect(providers).toEqual(['placehold', 'lorem-picsum']);
-    });
-
-    it('should return providers from config', () => {
-      const limitedConfig: ProviderConfig = {
-        placehold: {
-          baseUrl: 'https://placehold.co',
-          urlTemplate: '{baseUrl}/{width}x{height}',
-        },
-        'lorem-picsum': {
-          baseUrl: 'https://picsum.photos',
-          urlTemplate: '{baseUrl}/{width}/{height}',
+        placeholdOptions: {
+          format: 'png',
+          backgroundColor: 'red',
+          textColor: 'white',
         },
       };
 
-      const limitedGenerator = new PlaceholderGenerator(validator, limitedConfig, mockLogger);
+      const result = await generator.generatePlaceholder(params);
 
-      const providers = limitedGenerator.getSupportedProviders();
-      expect(providers).toContain('placehold');
-      expect(providers).toContain('lorem-picsum');
-    });
-  });
-
-  describe('getProviderConfig', () => {
-    it('should return provider configuration for valid provider', () => {
-      const config = generator.getProviderConfig('placehold');
-      expect(config).toEqual({
-        baseUrl: 'https://placehold.co',
-        urlTemplate: '{baseUrl}/{width}x{height}',
+      expect(result.appliedOptions).toEqual({
+        placeholdOptions: {
+          format: 'png',
+          backgroundColor: 'red',
+          textColor: 'white',
+        },
       });
     });
 
-    it('should return undefined for invalid provider', () => {
-      const config = generator.getProviderConfig('invalid-provider' as Provider);
-      expect(config).toBeUndefined();
-    });
-  });
-
-  describe('error handling', () => {
-    it('should log debug information on generation start', async () => {
+    it('should log generation with enhanced information', async () => {
       const params: ImagePlaceholderParams = {
         provider: 'placehold',
-        width: 100,
-        height: 100,
-      };
-
-      await generator.generatePlaceholder(params);
-
-      expect(mockLogger.debug).toHaveBeenCalledWith('Generating placeholder image', { params });
-    });
-
-    it('should log success information on completion', async () => {
-      const params: ImagePlaceholderParams = {
-        provider: 'placehold',
-        width: 100,
-        height: 100,
+        width: 300,
+        height: 200,
+        placeholdOptions: { format: 'png' },
       };
 
       await generator.generatePlaceholder(params);
@@ -268,65 +582,26 @@ describe('PlaceholderGenerator', () => {
         'Placeholder image generated successfully',
         expect.objectContaining({
           provider: 'placehold',
-          dimensions: '100x100',
-          url: 'https://placehold.co/100x100',
-        })
-      );
-    });
-
-    it('should log debug information during URL building', async () => {
-      const params: ImagePlaceholderParams = {
-        provider: 'placehold',
-        width: 200,
-        height: 150,
-      };
-
-      await generator.generatePlaceholder(params);
-
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Built provider URL',
-        expect.objectContaining({
-          provider: 'placehold',
-          template: '{baseUrl}/{width}x{height}',
-          url: 'https://placehold.co/200x150',
-          dimensions: '200x150',
+          dimensions: '300x200',
+          hasOptions: true,
         })
       );
     });
   });
 
-  describe('edge cases', () => {
-    it('should handle minimum dimensions', async () => {
-      const params: ImagePlaceholderParams = {
-        provider: 'placehold',
-        width: 1,
-        height: 1,
-      };
-
-      const result = await generator.generatePlaceholder(params);
-      expect(result.url).toBe('https://placehold.co/1x1');
+  describe('Provider management', () => {
+    it('should get supported providers from factory', () => {
+      const providers = generator.getSupportedProviders();
+      expect(providers).toContain('placehold');
+      expect(providers).toContain('lorem-picsum');
     });
 
-    it('should handle maximum dimensions', async () => {
-      const params: ImagePlaceholderParams = {
-        provider: 'placehold',
-        width: 10000,
-        height: 10000,
-      };
+    it('should get provider base URL from factory', () => {
+      const placeholdUrl = generator.getProviderBaseUrl('placehold');
+      const picsumUrl = generator.getProviderBaseUrl('lorem-picsum');
 
-      const result = await generator.generatePlaceholder(params);
-      expect(result.url).toBe('https://placehold.co/10000x10000');
-    });
-
-    it('should handle large dimension numbers as strings in URL', async () => {
-      const params: ImagePlaceholderParams = {
-        provider: 'lorem-picsum',
-        width: 9999,
-        height: 8888,
-      };
-
-      const result = await generator.generatePlaceholder(params);
-      expect(result.url).toBe('https://picsum.photos/9999/8888');
+      expect(placeholdUrl).toBe('https://placehold.co');
+      expect(picsumUrl).toBe('https://picsum.photos');
     });
   });
 });

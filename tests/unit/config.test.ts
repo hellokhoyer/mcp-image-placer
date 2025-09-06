@@ -36,7 +36,7 @@ describe('Configuration Module', () => {
 
       expect(config).toEqual(DEFAULT_CONFIG);
       expect(config.name).toBe('image-placeholder');
-      expect(config.version).toBe('1.0.0');
+      expect(config.version).toBe('1.1.0');
       expect(config.logLevel).toBe('info');
       expect(config.environment).toBe('development');
     });
@@ -48,7 +48,7 @@ describe('Configuration Module', () => {
 
       expect(config.logLevel).toBe('debug');
       expect(config.name).toBe('image-placeholder');
-      expect(config.version).toBe('1.0.0');
+      expect(config.version).toBe('1.1.0');
       expect(config.environment).toBe('development');
     });
 
@@ -252,7 +252,7 @@ describe('Configuration Module', () => {
     it('should export DEFAULT_CONFIG', () => {
       expect(DEFAULT_CONFIG).toBeDefined();
       expect(DEFAULT_CONFIG.name).toBe('image-placeholder');
-      expect(DEFAULT_CONFIG.version).toBe('1.0.0');
+      expect(DEFAULT_CONFIG.version).toBe('1.1.0');
       expect(DEFAULT_CONFIG.logLevel).toBe('info');
       expect(DEFAULT_CONFIG.environment).toBe('development');
     });

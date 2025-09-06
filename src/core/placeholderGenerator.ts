@@ -1,5 +1,5 @@
 /**
- * Placeholder generator with provider-specific URL generation
+ * Enhanced placeholder generator with provider-specific URL generation
  */
 
 import {
@@ -11,6 +11,7 @@ import {
 } from '../types/index.js';
 import { ProviderError } from '../errors/index.js';
 import { PlaceholderValidator } from './validator.js';
+import { UrlBuilderFactory } from './urlBuilders/index.js';
 
 export class PlaceholderGenerator {
   private validator: PlaceholderValidator;
@@ -26,7 +27,7 @@ export class PlaceholderGenerator {
   /**
    * Generates a placeholder image URL based on the provided parameters
    *
-   * @param params - Parameters for image generation
+   * @param params - Parameters for image generation including provider-specific options
    * @returns Promise resolving to image placeholder result
    * @throws {ValidationError} When parameters are invalid
    * @throws {ProviderError} When provider-specific generation fails
@@ -34,25 +35,43 @@ export class PlaceholderGenerator {
   async generatePlaceholder(params: ImagePlaceholderParams): Promise<ImagePlaceholderResult> {
     this.logger.debug('Generating placeholder image', { params });
 
-    // Validate parameters
+    // Validate basic parameters
     this.validator.validateParams(params);
 
     try {
-      const url = this.buildProviderUrl(params.provider, params.width, params.height);
+      // Use URL builder factory to create provider-specific builder
+      const urlBuilder = UrlBuilderFactory.createBuilder(params.provider, this.logger);
+
+      let url: string;
+      const effectiveHeight = params.height || params.width;
+
+      // Generate URL based on provider
+      if (params.provider === 'placehold') {
+        url = urlBuilder.buildUrl(params.width, params.height, params.placeholdOptions);
+      } else if (params.provider === 'lorem-picsum') {
+        url = urlBuilder.buildUrl(params.width, params.height, params.picsumOptions);
+      } else {
+        throw new ProviderError(params.provider, 'Unsupported provider');
+      }
 
       const result: ImagePlaceholderResult = {
         url,
         provider: params.provider,
         dimensions: {
           width: params.width,
-          height: params.height,
+          height: effectiveHeight,
+        },
+        appliedOptions: {
+          ...(params.placeholdOptions && { placeholdOptions: params.placeholdOptions }),
+          ...(params.picsumOptions && { picsumOptions: params.picsumOptions }),
         },
       };
 
       this.logger.info('Placeholder image generated successfully', {
         provider: params.provider,
-        dimensions: `${params.width}x${params.height}`,
+        dimensions: `${params.width}x${effectiveHeight}`,
         url,
+        hasOptions: !!(params.placeholdOptions || params.picsumOptions),
       });
 
       return result;
@@ -63,74 +82,12 @@ export class PlaceholderGenerator {
   }
 
   /**
-   * Builds provider-specific URL for placeholder image
-   *
-   * @param provider - The provider to use
-   * @param width - Image width
-   * @param height - Image height
-   * @returns Generated URL string
-   * @throws {ProviderError} When provider configuration is invalid
-   */
-  private buildProviderUrl(provider: Provider, width: number, height: number): string {
-    const config = this.providerConfig[provider];
-
-    if (!config) {
-      throw new ProviderError(provider, 'Provider configuration not found', {
-        availableProviders: Object.keys(this.providerConfig),
-      });
-    }
-
-    if (!config.baseUrl || !config.urlTemplate) {
-      throw new ProviderError(
-        provider,
-        'Invalid provider configuration - missing baseUrl or urlTemplate',
-        { config }
-      );
-    }
-
-    const url = this.interpolateUrlTemplate(config.urlTemplate, {
-      baseUrl: config.baseUrl,
-      width: width.toString(),
-      height: height.toString(),
-    });
-
-    this.logger.debug('Built provider URL', {
-      provider,
-      template: config.urlTemplate,
-      url,
-      dimensions: `${width}x${height}`,
-    });
-
-    return url;
-  }
-
-  /**
-   * Interpolates URL template with provided variables
-   *
-   * @param template - URL template string
-   * @param variables - Variables to interpolate
-   * @returns Interpolated URL string
-   */
-  private interpolateUrlTemplate(template: string, variables: Record<string, string>): string {
-    return template.replace(/\{(\w+)\}/g, (_match, key) => {
-      if (variables[key] !== undefined) {
-        return variables[key];
-      }
-      throw new ProviderError('template', `Template variable "${key}" not provided`, {
-        template,
-        variables,
-        missingVariable: key,
-      });
-    });
-  }
-
-  /**
    * Gets list of supported providers
    *
    * @returns Array of supported provider names
    */
   getSupportedProviders(): Provider[] {
-    return Object.keys(this.providerConfig) as Provider[];
+    return UrlBuilderFactory.getSupportedProviders();
   }
 
   /**
@@ -141,5 +98,15 @@ export class PlaceholderGenerator {
    */
   getProviderConfig(provider: Provider): ProviderConfig[Provider] | undefined {
     return this.providerConfig[provider];
+  }
+
+  /**
+   * Gets base URL for a provider (using URL builder factory)
+   *
+   * @param provider - Provider to get base URL for
+   * @returns Base URL or undefined if provider not supported
+   */
+  getProviderBaseUrl(provider: Provider): string | undefined {
+    return UrlBuilderFactory.getProviderBaseUrl(provider);
   }
 }

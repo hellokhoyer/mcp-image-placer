@@ -1,5 +1,5 @@
 /**
- * Image placeholder validator with comprehensive validation logic
+ * Enhanced image placeholder validator with comprehensive validation logic
  */
 
 import { ImagePlaceholderParams, Provider, ValidationConstraints } from '../types/index.js';
@@ -13,7 +13,7 @@ export class PlaceholderValidator {
   }
 
   /**
-   * Validates image placeholder parameters
+   * Validates image placeholder parameters including provider-specific options
    *
    * @param params - The parameters to validate
    * @throws {ValidationError} When validation fails
@@ -26,7 +26,14 @@ export class PlaceholderValidator {
 
     this.validateProvider(params.provider);
     this.validateDimension('width', params.width);
-    this.validateDimension('height', params.height);
+
+    // Height is optional - if not provided, square image is assumed
+    if (params.height !== undefined) {
+      this.validateDimension('height', params.height);
+    }
+
+    // Validate provider-specific options
+    this.validateProviderOptions(params);
   }
 
   /**
@@ -76,6 +83,34 @@ export class PlaceholderValidator {
         `Must be between ${minConstraint} and ${maxConstraint} pixels`
       );
     }
+  }
+
+  /**
+   * Validates provider-specific options
+   *
+   * @param params - Full parameters including provider-specific options
+   * @throws {ValidationError} When provider options are invalid
+   */
+  private validateProviderOptions(params: ImagePlaceholderParams): void {
+    // Check that provider-specific options match the provider
+    if (params.provider === 'placehold' && params.picsumOptions) {
+      throw new ValidationError(
+        'picsumOptions',
+        params.picsumOptions,
+        'Cannot use picsum options with placehold provider'
+      );
+    }
+
+    if (params.provider === 'lorem-picsum' && params.placeholdOptions) {
+      throw new ValidationError(
+        'placeholdOptions',
+        params.placeholdOptions,
+        'Cannot use placehold options with lorem-picsum provider'
+      );
+    }
+
+    // Note: Detailed provider-specific option validation is handled by the URL builders
+    // This validator only checks for basic consistency
   }
 
   /**

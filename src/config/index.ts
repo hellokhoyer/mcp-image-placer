@@ -7,7 +7,7 @@ import { ConfigurationError } from '../errors/index.js';
 
 const DEFAULT_CONFIG: ServerConfig = {
   name: 'image-placeholder',
-  version: '1.0.0',
+  version: '1.1.0',
   logLevel: 'info',
   environment: 'development',
 };
