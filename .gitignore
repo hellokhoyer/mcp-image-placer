@@ -38,3 +38,14 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Backup files
+*~
+*.bak
+*.backup
+*.orig
+*.old
+*.tmp
+#*#
+.#*
+__MACOSX/
